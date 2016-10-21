@@ -74,7 +74,7 @@ let runId = 0;
 class JestTestRunner {
 
   constructor(uri, jestFile) {
-    this.uri = uri;
+    this.uri = path.join(uri, atom.config.get('nuclide-test-runner-jest.projectRoot'));
     this.jestFile = jestFile;
     this.emitter = new Emitter();
     this.testsDir = uri + '/__tests__';
@@ -82,22 +82,22 @@ class JestTestRunner {
 
   run() {
     ++runId;
-    
+
     const TR = {
       stdout: '',
       stderr: ''
     };
     TESTRUNS[runId] = TR;
-    
+
     let args = ['--json']; // , 'verbose'];
     if (this.jestFile) {
       args.push(this.jestFile);
     }
-    
+
     this.emitter.emit('stderr', {runId:runId, data: `> jest ${args.join(' ')}` });
-    
-    TR.currentProcess = jest = spawn('node_modules/.bin/jest', args, {cwd: this.uri});
-    
+
+    TR.currentProcess = jest = spawn(path.join(this.uri, 'node_modules/.bin/jest'), args, {cwd: this.uri});
+
     const summaryInfo = [];
     TR.summaryInfo = summaryInfo;
 
@@ -105,26 +105,26 @@ class JestTestRunner {
       TR.stderr += data;
       this.emitter.emit('stderr', {runId:runId, data:data});
     });
-    
+
     jest.stdout.on('data', (data) => {
       TR.stdout += data;
       this.emitter.emit('stdout', {runId:runId, data:data});
     });
-    
+
     jest.stdout.on('error', (error) => {
       // console.log("error", error);
       this.emit('error', {runId:runId, error:error});
       // this.finallyFn(runId);
     });
-    
+
     jest.stdout.on('close', (code) => {
       // console.log("close", code);
-      
+
       const data = JSON.parse(TR.stdout);
-      
+
       // console.log( 'OUT', data);
       // console.log( 'ERR', TR.stderr);
-      
+
       data.testResults.forEach((tr) => {
         this.emitter.emit('run-test', {
           runId: runId,
@@ -145,37 +145,37 @@ class JestTestRunner {
           }
         });
       });
-      
+
       this.finallyFn(runId);
-    });  
+    });
   }
-  
+
   do(fn) {
     this.doFn = fn;
     return this;
   }
-  
+
   finally(fn) {
     this.finallyFn = fn;
     return this;
   }
-  
+
   subscribe() {
     // console.log('subscribe');
-    
+
     this.emitter.on('summary',  (m) => { m.kind = 'summary';  this.doFn(m); } );
     this.emitter.on('run-test', (m) => { m.kind = 'run-test'; this.doFn(m); } );
     this.emitter.on('start',    (m) => { m.kind = 'start';    this.doFn(m); } );
     this.emitter.on('error',    (m) => { m.kind = 'error';    this.doFn(m); } );
     this.emitter.on('stdout',   (m) => { m.kind = 'stdout';   this.doFn(m); } ); // ?
     this.emitter.on('stderr',   (m) => { m.kind = 'stderr';   this.doFn(m); } );
-    
+
     setTimeout(() => { this.run(); }, 0);
-    
-    
-    
+
+
+
     const ignoreFn = ( this.jestFile ? ignoreFileCriteriaWithRegex(this.jestFile) : ignoreFileCriteria );
-    
+
     recursiveReaddir(this.testsDir, [ignoreFn], (err, files) => {
       if (!err) {
         const summaryInfo = files.map((f) => {
@@ -187,21 +187,21 @@ class JestTestRunner {
             name      : f.substring( this.testsDir.length + 1)
           };
         });
-        
+
         // console.log('summaryInfo', summaryInfo);
-        
+
         this.emitter.emit('summary', {runId:runId, summaryInfo:summaryInfo});
       }
     });
-    
+
     return this;
   }
-  
+
   unsubscribe() {
     // console.log('unsubscribe');
-    
+
     this.emitter.dispose();
-    
+
     return this;
   }
 
@@ -210,20 +210,25 @@ class JestTestRunner {
 
 
 module.exports = {
+  config: {
+    projectRoot: {
+      type: 'string',
+      default: ''
+    }
+  },
   provideTestRunner: (service) => {
     return {
       label: 'Jest',
       runTest: (openedFilePath) => {
         // console.log(`request test runner for openedFilePath ${openedFilePath}`);
-        
         basepath = null;
-        
+
         let jestFile = '';
-        
+
         if (itemInArr('/__tests__/', openedFilePath) && pathOfAllowedExt(openedFilePath)) {
           jestFile = openedFilePath;
         }
-        
+
         atom.project.getPaths().forEach(p => {
           if (!path.relative(p, openedFilePath).match(/^\.\./)) {
             basepath = p;
