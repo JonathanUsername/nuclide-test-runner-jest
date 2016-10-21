@@ -213,6 +213,7 @@ module.exports = {
   config: {
     projectRoot: {
       type: 'string',
+      description: 'This is the folder where your node_modules and package.json are.',
       default: ''
     }
   },
